@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <title>Visitors Board</title>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
 
@@ -534,14 +536,66 @@ body{
 const PALETTE = ['c1','c2','c3','c4','c5','c6'];
 const STORAGE_KEYS = { properties:'bc-properties', bookings:'bc-bookings', pin:'bc-admin-pin', requests:'bc-requests' };
 
-// --- Storage backend: Google Sheets (via a small Apps Script API) -----
-// This version is for hosting OUTSIDE Claude (GitHub Pages, Netlify, etc.),
-// where there's no sandbox blocking outbound requests. Uses JSONP (reads)
-// and a hidden iframe form POST (writes) instead of plain fetch(), since
-// Apps Script's CORS support for fetch() is unreliable across browsers.
-const SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbzFer-H8Oq53dzXY8SXBix1Cr7p3wZMIK_bILjL5_8H4QSFBSy9t_Hfjha34Xp77qIE/exec';
+// --- Storage backend: Firebase Firestore -------------------------------
+// Fill in your project's config below (from Firebase console > Project
+// settings > Your apps > web app). Firebase's SDK handles CORS correctly
+// out of the box, unlike the Google Apps Script approach — no JSONP or
+// hidden-form workarounds needed.
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBcLCYRLTl5WR-zPZ8c4vK-Os3a0XyTcIw",
+  authDomain: "visitor-booking-tracker.firebaseapp.com",
+  projectId: "visitor-booking-tracker",
+  storageBucket: "visitor-booking-tracker.firebasestorage.app",
+  messagingSenderId: "459833513891",
+  appId: "1:459833513891:web:752fc169141f1743e4ac16",
+};
 
 let lastStorageError = '';
+let _db = null;
+
+function getDb(){
+  if(_db) return _db;
+  if(!FIREBASE_CONFIG.apiKey){ lastStorageError = 'Firebase config not set'; return null; }
+  if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+  _db = firebase.firestore();
+  return _db;
+}
+
+async function storageGet(key){
+  const db = getDb();
+  if(!db) return null;
+  try{
+    const doc = await db.collection('data').doc(key).get();
+    if(!doc.exists) return null;
+    const value = doc.data().value;
+    return (value !== undefined && value !== null && value !== '') ? { key, value } : null;
+  }catch(e){
+    lastStorageError = `Firestore get error: ${e.message || e}`;
+    netLog('Firestore get failed', key, e);
+    return null;
+  }
+}
+
+async function storageSet(key, value){
+  const db = getDb();
+  if(!db) return false;
+  try{
+    await db.collection('data').doc(key).set({ value });
+    return true;
+  }catch(e){
+    lastStorageError = `Firestore set error: ${e.message || e}`;
+    netLog('Firestore set failed', key, e);
+    return false;
+  }
+}
+
+/* ---------------------------------------------------------------------
+ * GOOGLE SHEETS BACKEND (disabled) — kept here for reference. Works
+ * outside Claude but had unreliable CORS behavior with Apps Script.
+ * To re-enable: swap in these functions and the JSONP/iframe helpers
+ * below, plus set SHEETS_API_URL.
+
+const SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbzFer-H8Oq53dzXY8SXBix1Cr7p3wZMIK_bILjL5_8H4QSFBSy9t_Hfjha34Xp77qIE/exec';
 let jsonpCounter = 0;
 
 function jsonpRequest(url, timeoutMs=20000){
@@ -620,7 +674,7 @@ function iframeFormPost(url, fields, timeoutMs=20000){
   });
 }
 
-async function storageGet(key){
+async function storageGetViaSheets(key){
   if(!SHEETS_API_URL) { lastStorageError = 'Sheets URL not configured'; return null; }
   try{
     const data = await jsonpRequest(`${SHEETS_API_URL}?key=${encodeURIComponent(key)}`);
@@ -633,12 +687,12 @@ async function storageGet(key){
   }
 }
 
-async function storageSet(key, value){
+async function storageSetViaSheets(key, value){
   if(!SHEETS_API_URL) { lastStorageError = 'Sheets URL not configured'; return false; }
   try{
     const submitted = await iframeFormPost(SHEETS_API_URL, { payload: JSON.stringify({ key, value }) });
     if(!submitted){ lastStorageError = 'POST timed out — the write may not have completed'; return false; }
-    const check = await storageGet(key);
+    const check = await storageGetViaSheets(key);
     const ok = !!check && String(check.value) === String(value);
     if(!ok) lastStorageError = 'Write could not be verified — the value on the sheet did not match';
     return ok;
@@ -648,15 +702,13 @@ async function storageSet(key, value){
     return false;
   }
 }
+* --------------------------------------------------------------------- */
 
 /* ---------------------------------------------------------------------
  * CLAUDE STORAGE BACKEND (disabled) — kept here in case this same file is
  * ever hosted back inside a Claude artifact instead of GitHub Pages/etc.
  * Claude's window.storage API only exists inside the Claude sandbox, so
  * this cannot work when self-hosted elsewhere.
- *
- * To re-enable: replace the storageGet/storageSet functions above with the
- * versions below (and remove the Sheets/JSONP block).
 
 async function storageGet(key){
   try{
