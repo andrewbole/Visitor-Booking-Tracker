@@ -85,6 +85,15 @@ body{
 .btn:hover{border-color:var(--ink);}
 .btn:focus-visible{outline:2px solid var(--c1); outline-offset:2px;}
 .btn-primary{background:var(--ink); color:#fff; border-color:var(--ink);}
+.btn-request{
+  background:var(--danger);
+  color:#fff;
+  border-color:var(--danger);
+  font-size:15px;
+  padding:12px 20px;
+  font-weight:700;
+}
+.btn-request:hover{background:#7A382D; border-color:#7A382D;}
 .btn-primary:hover{background:#000;}
 .btn-ghost{border-color:transparent; background:transparent;}
 .btn-ghost:hover{background:var(--line-soft); border-color:transparent;}
@@ -929,7 +938,7 @@ function render(){
     </div>
     <div class="top-actions">
       <span class="admin-pill ${state.adminUnlocked?'on':'view-only'}"><span class="dot"></span>${state.adminUnlocked?'Admin unlocked':'View only'}</span>
-      ${state.adminUnlocked ? `<button class="btn btn-primary" id="openAddBooking">+ Add booking</button>` : `<button class="btn btn-primary" id="openRequestDates">Request dates</button>`}
+      ${state.adminUnlocked ? `<button class="btn btn-primary" id="openAddBooking">+ Add booking</button>` : `<button class="btn btn-request" id="openRequestDates">Request dates</button>`}
       <button class="btn ${state.adminUnlocked?'btn-ghost':''}" id="adminToggle">${state.adminUnlocked?'Lock':'Unlock admin'}</button>
     </div>
   </div>`;
